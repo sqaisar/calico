@@ -418,12 +418,9 @@ func NewIntDataplaneDriver(config Config) *InternalDataplane {
 		InsertMode:            config.IptablesInsertMode,
 		RefreshInterval:       config.IptablesRefreshInterval,
 		PostWriteInterval:     config.IptablesPostWriteCheckInterval,
-		LockTimeout:           config.IptablesLockTimeout,
-		LockProbeInterval:     config.IptablesLockProbeInterval,
-		// BackendMode:           backendMode,
-		LookPathOverride: config.LookPathOverride,
-		OnStillAlive:     dp.reportHealth,
-		OpRecorder:       dp.loopSummarizer,
+		LookPathOverride:      config.LookPathOverride,
+		OnStillAlive:          dp.reportHealth,
+		OpRecorder:            dp.loopSummarizer,
 	}
 
 	if config.BPFEnabled && config.BPFKubeProxyIptablesCleanupEnabled {
@@ -449,26 +446,6 @@ func NewIntDataplaneDriver(config Config) *InternalDataplane {
 	}
 
 	dataplaneFeatures := featureDetector.GetFeatures()
-	var iptablesLock sync.Locker
-	if dataplaneFeatures.RestoreSupportsLock {
-		log.Debug("Calico implementation of iptables lock disabled (because detected version of " +
-			"iptables-restore will use its own implementation).")
-		iptablesLock = dummyLock{}
-	} else if config.IptablesLockTimeout <= 0 {
-		log.Debug("Calico implementation of iptables lock disabled (by configuration).")
-		iptablesLock = dummyLock{}
-	} else {
-		// Create the shared iptables lock.  This allows us to block other processes from
-		// manipulating iptables while we make our updates.  We use a shared lock because we
-		// actually do multiple updates in parallel (but to different tables), which is safe.
-		log.WithField("timeout", config.IptablesLockTimeout).Debug(
-			"Calico implementation of iptables lock enabled")
-		// iptablesLock = nftables.NewSharedLock(
-		// 	config.IptablesLockFilePath,
-		// 	config.IptablesLockTimeout,
-		// 	config.IptablesLockProbeInterval,
-		// )
-	}
 
 	// CASEY
 	// Create nftables tables.
@@ -476,14 +453,12 @@ func NewIntDataplaneDriver(config Config) *InternalDataplane {
 		"mangle",
 		4,
 		rules.RuleHashPrefix,
-		iptablesLock,
 		featureDetector,
 		iptablesOptions)
 	natTableV4 := nftables.NewTable(
 		"nat",
 		4,
 		rules.RuleHashPrefix,
-		iptablesLock,
 		featureDetector,
 		iptablesNATOptions,
 	)
@@ -491,14 +466,12 @@ func NewIntDataplaneDriver(config Config) *InternalDataplane {
 		"raw",
 		4,
 		rules.RuleHashPrefix,
-		iptablesLock,
 		featureDetector,
 		iptablesOptions)
 	filterTableV4 := nftables.NewTable(
 		"filter",
 		4,
 		rules.RuleHashPrefix,
-		iptablesLock,
 		featureDetector,
 		iptablesOptions)
 
@@ -614,7 +587,6 @@ func NewIntDataplaneDriver(config Config) *InternalDataplane {
 		"filter",
 		6,
 		rules.RuleHashPrefix,
-		iptablesLock,
 		featureDetector,
 		iptablesOptions,
 	)
@@ -717,7 +689,6 @@ func NewIntDataplaneDriver(config Config) *InternalDataplane {
 			featureDetector,
 			config.HealthAggregator,
 		)
-
 		if err != nil {
 			log.WithError(err).Panic("Failed to create BPF endpoint manager.")
 		}
@@ -844,7 +815,6 @@ func NewIntDataplaneDriver(config Config) *InternalDataplane {
 			"mangle",
 			6,
 			rules.RuleHashPrefix,
-			iptablesLock,
 			featureDetector,
 			iptablesOptions,
 		)
@@ -852,7 +822,6 @@ func NewIntDataplaneDriver(config Config) *InternalDataplane {
 			"nat",
 			6,
 			rules.RuleHashPrefix,
-			iptablesLock,
 			featureDetector,
 			iptablesNATOptions,
 		)
@@ -860,7 +829,6 @@ func NewIntDataplaneDriver(config Config) *InternalDataplane {
 			"raw",
 			6,
 			rules.RuleHashPrefix,
-			iptablesLock,
 			featureDetector,
 			iptablesOptions,
 		)

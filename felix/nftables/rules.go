@@ -40,6 +40,14 @@ type Rule struct {
 	Comment []string
 }
 
+func (r Rule) Render(chain string, prefixFragment string, features *environment.Features) *knftables.Rule {
+	return &knftables.Rule{
+		Chain:   chain,
+		Rule:    r.renderInner([]string{}, "", nil),
+		Comment: r.comment(prefixFragment),
+	}
+}
+
 func (r Rule) RenderAppend(table, chainName, prefixFragment string, features *environment.Features) string {
 	fragments := make([]string, 0, 6)
 	fragments = append(fragments, "add rule", table, chainName)
@@ -66,15 +74,24 @@ func (r Rule) RenderReplace(table, chainName string, handle int, prefixFragment 
 	return r.renderInner(fragments, prefixFragment, features)
 }
 
-func (r Rule) renderInner(fragments []string, prefixFragment string, features *environment.Features) string {
-	if prefixFragment != "" {
-		fragments = append(fragments, prefixFragment)
-	}
+func (r Rule) comment(prefixFragment string) *string {
+	fragments := []string{}
 	for _, c := range r.Comment {
 		c = escapeComment(c)
 		c = truncateComment(c)
-		commentFragment := fmt.Sprintf("comment \"%s\"", c)
+		commentFragment := fmt.Sprintf("comment \"%s; %s\"", prefixFragment, c)
 		fragments = append(fragments, commentFragment)
+	}
+	cmt := strings.Join(fragments, " ")
+	if cmt == "" {
+		return nil
+	}
+	return &cmt
+}
+
+func (r Rule) renderInner(fragments []string, prefixFragment string, features *environment.Features) string {
+	if prefixFragment != "" {
+		fragments = append(fragments, prefixFragment)
 	}
 	matchFragment := r.Match.Render()
 	if matchFragment != "" {
