@@ -19,7 +19,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
-	. "github.com/projectcalico/calico/felix/iptables"
+	. "github.com/projectcalico/calico/felix/nftables"
 	"github.com/projectcalico/calico/felix/proto"
 	"github.com/projectcalico/calico/felix/stringutils"
 )
@@ -37,7 +37,7 @@ func (r *DefaultRuleRenderer) WorkloadDispatchChains(
 	// If there is no policy at all for a workload endpoint, we don't allow any traffic through
 	// it.
 	endRules := []Rule{
-		Rule{
+		{
 			Match:   Match(),
 			Action:  r.IptablesFilterDenyAction(),
 			Comment: []string{"Unknown interface"},
@@ -176,12 +176,12 @@ func (r *DefaultRuleRenderer) hostDispatchChains(
 		// Arrange sets of rules to goto the specified default chain for any packets that don't match an
 		// interface in the `endpoints` map.
 		fromEndRules = []Rule{
-			Rule{
+			{
 				Action: GotoAction{Target: EndpointChainName(HostFromEndpointPfx, defaultIfaceName)},
 			},
 		}
 		fromEndForwardRules = []Rule{
-			Rule{
+			{
 				Action: GotoAction{Target: EndpointChainName(HostFromEndpointForwardPfx, defaultIfaceName)},
 			},
 		}
@@ -205,7 +205,7 @@ func (r *DefaultRuleRenderer) hostDispatchChains(
 			Action: GotoAction{Target: EndpointChainName(HostToEndpointPfx, defaultIfaceName)},
 		})
 		toEndForwardRules = []Rule{
-			Rule{
+			{
 				Action: GotoAction{Target: EndpointChainName(HostToEndpointForwardPfx, defaultIfaceName)},
 			},
 		}
@@ -278,7 +278,6 @@ func (r *DefaultRuleRenderer) interfaceNameDispatchChains(
 	fromEndRules []Rule,
 	toEndRules []Rule,
 ) (chains []*Chain) {
-
 	log.WithField("ifaceNames", names).Debug("Rendering endpoint dispatch chains")
 
 	// Since there can be >100 endpoints, putting them in a single list adds some latency to
@@ -339,7 +338,6 @@ func (r *DefaultRuleRenderer) endpointMarkDispatchChains(
 	dispatchSetMarkEndpointChainName,
 	dispatchFromMarkEndpointChainName string,
 ) []*Chain {
-
 	log.WithField("ifaceNames", append(wlNames, hepNames...)).Debug("Rendering endpoint mark dispatch chains")
 
 	// start rendering set mark rules.
@@ -393,7 +391,8 @@ func (r *DefaultRuleRenderer) endpointMarkDispatchChains(
 	rootSetMarkRules = append(rootSetMarkRules, Rule{
 		Action: SetMaskedMarkAction{
 			Mark: r.IptablesMarkNonCaliEndpoint,
-			Mask: epMarkMapper.GetMask()},
+			Mask: epMarkMapper.GetMask(),
+		},
 		Comment: []string{"Non-Cali endpoint mark"},
 	})
 
@@ -460,7 +459,6 @@ func (r *DefaultRuleRenderer) buildSingleDispatchChains(
 	getActionForEndpoint func(pfx, name string) Action,
 	endRules []Rule,
 ) ([]*Chain, *Chain, []Rule) {
-
 	childChains := make([]*Chain, 0)
 	rootRules := make([]Rule, 0)
 

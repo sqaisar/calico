@@ -58,11 +58,10 @@ import (
 	"github.com/projectcalico/calico/felix/idalloc"
 	"github.com/projectcalico/calico/felix/ifacemonitor"
 	"github.com/projectcalico/calico/felix/ipsets"
-	"github.com/projectcalico/calico/felix/iptables"
-	"github.com/projectcalico/calico/felix/iptables/cmdshim"
 	"github.com/projectcalico/calico/felix/jitter"
 	"github.com/projectcalico/calico/felix/labelindex"
 	"github.com/projectcalico/calico/felix/logutils"
+	"github.com/projectcalico/calico/felix/nftables"
 	"github.com/projectcalico/calico/felix/proto"
 	"github.com/projectcalico/calico/felix/routerule"
 	"github.com/projectcalico/calico/felix/routetable"
@@ -187,6 +186,8 @@ type Config struct {
 
 	ExternalNodesCidrs []string
 
+	NFTables bool
+
 	BPFEnabled                         bool
 	BPFPolicyDebugEnabled              bool
 	BPFDisableUnprivileged             bool
@@ -280,11 +281,11 @@ type InternalDataplane struct {
 	fromDataplane           chan interface{}
 	sendDataplaneInSyncOnce sync.Once
 
-	allIptablesTables    []*iptables.Table
-	iptablesMangleTables []*iptables.Table
-	iptablesNATTables    []*iptables.Table
-	iptablesRawTables    []*iptables.Table
-	iptablesFilterTables []*iptables.Table
+	allIptablesTables    []*nftables.Table
+	iptablesMangleTables []*nftables.Table
+	iptablesNATTables    []*nftables.Table
+	iptablesRawTables    []*nftables.Table
+	iptablesFilterTables []*nftables.Table
 	ipSets               []common.IPSetsDataplane
 
 	ipipManager *ipipManager
@@ -409,20 +410,20 @@ func NewIntDataplaneDriver(config Config) *InternalDataplane {
 	dp.ifaceMonitor.AddrCallback = dp.onIfaceAddrsChange
 	dp.ifaceMonitor.InSyncCallback = dp.onIfaceInSync
 
-	backendMode := environment.DetectBackend(config.LookPathOverride, cmdshim.NewRealCmd, config.IptablesBackend)
+	// backendMode := environment.DetectBackend(config.LookPathOverride, cmdshim.NewRealCmd, config.IptablesBackend)
 
 	// Most iptables tables need the same options.
-	iptablesOptions := iptables.TableOptions{
+	iptablesOptions := nftables.TableOptions{
 		HistoricChainPrefixes: rules.AllHistoricChainNamePrefixes,
 		InsertMode:            config.IptablesInsertMode,
 		RefreshInterval:       config.IptablesRefreshInterval,
 		PostWriteInterval:     config.IptablesPostWriteCheckInterval,
 		LockTimeout:           config.IptablesLockTimeout,
 		LockProbeInterval:     config.IptablesLockProbeInterval,
-		BackendMode:           backendMode,
-		LookPathOverride:      config.LookPathOverride,
-		OnStillAlive:          dp.reportHealth,
-		OpRecorder:            dp.loopSummarizer,
+		// BackendMode:           backendMode,
+		LookPathOverride: config.LookPathOverride,
+		OnStillAlive:     dp.reportHealth,
+		OpRecorder:       dp.loopSummarizer,
 	}
 
 	if config.BPFEnabled && config.BPFKubeProxyIptablesCleanupEnabled {
@@ -462,21 +463,23 @@ func NewIntDataplaneDriver(config Config) *InternalDataplane {
 		// actually do multiple updates in parallel (but to different tables), which is safe.
 		log.WithField("timeout", config.IptablesLockTimeout).Debug(
 			"Calico implementation of iptables lock enabled")
-		iptablesLock = iptables.NewSharedLock(
-			config.IptablesLockFilePath,
-			config.IptablesLockTimeout,
-			config.IptablesLockProbeInterval,
-		)
+		// iptablesLock = nftables.NewSharedLock(
+		// 	config.IptablesLockFilePath,
+		// 	config.IptablesLockTimeout,
+		// 	config.IptablesLockProbeInterval,
+		// )
 	}
 
-	mangleTableV4 := iptables.NewTable(
+	// CASEY
+	// Create nftables tables.
+	mangleTableV4 := nftables.NewTable(
 		"mangle",
 		4,
 		rules.RuleHashPrefix,
 		iptablesLock,
 		featureDetector,
 		iptablesOptions)
-	natTableV4 := iptables.NewTable(
+	natTableV4 := nftables.NewTable(
 		"nat",
 		4,
 		rules.RuleHashPrefix,
@@ -484,26 +487,27 @@ func NewIntDataplaneDriver(config Config) *InternalDataplane {
 		featureDetector,
 		iptablesNATOptions,
 	)
-	rawTableV4 := iptables.NewTable(
+	rawTableV4 := nftables.NewTable(
 		"raw",
 		4,
 		rules.RuleHashPrefix,
 		iptablesLock,
 		featureDetector,
 		iptablesOptions)
-	filterTableV4 := iptables.NewTable(
+	filterTableV4 := nftables.NewTable(
 		"filter",
 		4,
 		rules.RuleHashPrefix,
 		iptablesLock,
 		featureDetector,
 		iptablesOptions)
-	ipSetsConfigV4 := config.RulesConfig.IPSetConfigV4
-	ipSetsV4 := ipsets.NewIPSets(ipSetsConfigV4, dp.loopSummarizer)
+
 	dp.iptablesNATTables = append(dp.iptablesNATTables, natTableV4)
 	dp.iptablesRawTables = append(dp.iptablesRawTables, rawTableV4)
 	dp.iptablesMangleTables = append(dp.iptablesMangleTables, mangleTableV4)
 	dp.iptablesFilterTables = append(dp.iptablesFilterTables, filterTableV4)
+	ipSetsConfigV4 := config.RulesConfig.IPSetConfigV4
+	ipSetsV4 := ipsets.NewIPSets(ipSetsConfigV4, dp.loopSummarizer)
 	dp.ipSets = append(dp.ipSets, ipSetsV4)
 
 	if config.RulesConfig.VXLANEnabled {
@@ -606,7 +610,7 @@ func NewIntDataplaneDriver(config Config) *InternalDataplane {
 
 	ipsetsManager := common.NewIPSetsManager("ipv4", ipSetsV4, config.MaxIPSetSize)
 	ipsetsManagerV6 := common.NewIPSetsManager("ipv6", nil, config.MaxIPSetSize)
-	filterTableV6 := iptables.NewTable(
+	filterTableV6 := nftables.NewTable(
 		"filter",
 		6,
 		rules.RuleHashPrefix,
@@ -662,9 +666,7 @@ func NewIntDataplaneDriver(config Config) *InternalDataplane {
 	bpfconntrack.SetMapSize(config.BPFMapSizeConntrack)
 	bpfifstate.SetMapSize(config.BPFMapSizeIfState)
 
-	var (
-		bpfEndpointManager *bpfEndpointManager
-	)
+	var bpfEndpointManager *bpfEndpointManager
 
 	if config.BPFEnabled {
 		log.Info("BPF enabled, starting BPF endpoint manager and map manager.")
@@ -838,7 +840,7 @@ func NewIntDataplaneDriver(config Config) *InternalDataplane {
 	dp.RegisterManager(newServiceLoopManager(filterTableV4, ruleRenderer, 4))
 
 	if config.IPv6Enabled {
-		mangleTableV6 := iptables.NewTable(
+		mangleTableV6 := nftables.NewTable(
 			"mangle",
 			6,
 			rules.RuleHashPrefix,
@@ -846,7 +848,7 @@ func NewIntDataplaneDriver(config Config) *InternalDataplane {
 			featureDetector,
 			iptablesOptions,
 		)
-		natTableV6 := iptables.NewTable(
+		natTableV6 := nftables.NewTable(
 			"nat",
 			6,
 			rules.RuleHashPrefix,
@@ -854,7 +856,7 @@ func NewIntDataplaneDriver(config Config) *InternalDataplane {
 			featureDetector,
 			iptablesNATOptions,
 		)
-		rawTableV6 := iptables.NewTable(
+		rawTableV6 := nftables.NewTable(
 			"raw",
 			6,
 			rules.RuleHashPrefix,
@@ -1045,7 +1047,7 @@ func writeMTUFile(mtu int) error {
 	// Write the smallest MTU to disk so other components can rely on this calculation consistently.
 	filename := "/var/lib/calico/mtu"
 	log.Debugf("Writing %d to "+filename, mtu)
-	if err := os.WriteFile(filename, []byte(fmt.Sprintf("%d", mtu)), 0644); err != nil {
+	if err := os.WriteFile(filename, []byte(fmt.Sprintf("%d", mtu)), 0o644); err != nil {
 		log.WithError(err).Error("Unable to write to " + filename)
 		return err
 	}
@@ -1224,7 +1226,7 @@ func cleanUpVXLANDevice(deviceName string) {
 
 type Manager interface {
 	// OnUpdate is called for each protobuf message from the datastore.  May either directly
-	// send updates to the IPSets and iptables.Table objects (which will queue the updates
+	// send updates to the IPSets and nftables.Table objects (which will queue the updates
 	// until the main loop instructs them to act) or (for efficiency) may wait until
 	// a call to CompleteDeferredWork() to flush updates to the dataplane.
 	OnUpdate(protoBufMsg interface{})
@@ -1302,8 +1304,7 @@ func (d *InternalDataplane) onIfaceInSync() {
 	d.ifaceUpdates <- &ifaceInSync{}
 }
 
-type ifaceInSync struct {
-}
+type ifaceInSync struct{}
 
 // onIfaceStateChange is our interface monitor callback.  It gets called from the monitor's thread.
 func (d *InternalDataplane) onIfaceStateChange(ifaceName string, state ifacemonitor.State, ifIndex int) {
@@ -1423,12 +1424,12 @@ func (d *InternalDataplane) doStaticDataplaneConfig() {
 	}
 }
 
-func bpfMarkPreestablishedFlowsRules() []iptables.Rule {
-	return []iptables.Rule{{
-		Match: iptables.Match().
+func bpfMarkPreestablishedFlowsRules() []nftables.Rule {
+	return []nftables.Rule{{
+		Match: nftables.Match().
 			ConntrackState("ESTABLISHED,RELATED"),
 		Comment: []string{"Mark pre-established flows."},
-		Action: iptables.SetMaskedMarkAction{
+		Action: nftables.SetMaskedMarkAction{
 			Mark: tcdefs.MarkLinuxConntrackEstablished,
 			Mask: tcdefs.MarkLinuxConntrackEstablishedMask,
 		},
@@ -1438,30 +1439,30 @@ func bpfMarkPreestablishedFlowsRules() []iptables.Rule {
 func (d *InternalDataplane) setUpIptablesBPF() {
 	rulesConfig := d.config.RulesConfig
 	for _, t := range d.iptablesFilterTables {
-		fwdRules := []iptables.Rule{
+		fwdRules := []nftables.Rule{
 			{
 				// Bypass is a strong signal from the BPF program, it means that the flow is approved
 				// by the program at both ingress and egress.
 				Comment: []string{"Pre-approved by BPF programs."},
-				Match:   iptables.Match().MarkMatchesWithMask(tcdefs.MarkSeenBypass, tcdefs.MarkSeenBypassMask),
-				Action:  iptables.AcceptAction{},
+				Match:   nftables.Match().MarkMatchesWithMask(tcdefs.MarkSeenBypass, tcdefs.MarkSeenBypassMask),
+				Action:  nftables.AcceptAction{},
 			},
 		}
 
-		var inputRules, outputRules []iptables.Rule
+		var inputRules, outputRules []nftables.Rule
 
 		// Handle packets for flows that pre-date the BPF programs.  The BPF program doesn't have any conntrack
 		// state for these so it allows them to fall through to iptables with a mark set.
 		inputRules = append(inputRules,
-			iptables.Rule{
-				Match: iptables.Match().
+			nftables.Rule{
+				Match: nftables.Match().
 					MarkMatchesWithMask(tcdefs.MarkSeenFallThrough, tcdefs.MarkSeenFallThroughMask).
 					ConntrackState("ESTABLISHED,RELATED"),
 				Comment: []string{"Accept packets from flows that pre-date BPF."},
-				Action:  iptables.AcceptAction{},
+				Action:  nftables.AcceptAction{},
 			},
-			iptables.Rule{
-				Match:   iptables.Match().MarkMatchesWithMask(tcdefs.MarkSeenFallThrough, tcdefs.MarkSeenFallThroughMask),
+			nftables.Rule{
+				Match:   nftables.Match().MarkMatchesWithMask(tcdefs.MarkSeenFallThrough, tcdefs.MarkSeenFallThroughMask),
 				Comment: []string{fmt.Sprintf("%s packets from unknown flows.", d.ruleRenderer.IptablesFilterDenyAction())},
 				Action:  d.ruleRenderer.IptablesFilterDenyAction(),
 			},
@@ -1473,8 +1474,8 @@ func (d *InternalDataplane) setUpIptablesBPF() {
 		for _, prefix := range rulesConfig.WorkloadIfacePrefixes {
 			fwdRules = append(fwdRules,
 				// Drop/reject packets that have come from a workload but have not been through our BPF program.
-				iptables.Rule{
-					Match:   iptables.Match().InInterface(prefix+"+").NotMarkMatchesWithMask(tcdefs.MarkSeen, tcdefs.MarkSeenMask),
+				nftables.Rule{
+					Match:   nftables.Match().InInterface(prefix+"+").NotMarkMatchesWithMask(tcdefs.MarkSeen, tcdefs.MarkSeenMask),
 					Action:  d.ruleRenderer.IptablesFilterDenyAction(),
 					Comment: []string{"From workload without BPF seen mark"},
 				},
@@ -1483,15 +1484,15 @@ func (d *InternalDataplane) setUpIptablesBPF() {
 			if rulesConfig.EndpointToHostAction == "ACCEPT" {
 				// Only need to worry about ACCEPT here.  Drop gets compiled into the BPF program and
 				// RETURN would be a no-op since there's nothing to RETURN from.
-				inputRules = append(inputRules, iptables.Rule{
-					Match:  iptables.Match().InInterface(prefix+"+").MarkMatchesWithMask(tcdefs.MarkSeen, tcdefs.MarkSeenMask),
-					Action: iptables.AcceptAction{},
+				inputRules = append(inputRules, nftables.Rule{
+					Match:  nftables.Match().InInterface(prefix+"+").MarkMatchesWithMask(tcdefs.MarkSeen, tcdefs.MarkSeenMask),
+					Action: nftables.AcceptAction{},
 				})
 			}
 
 			// Catch any workload to host packets that haven't been through the BPF program.
-			inputRules = append(inputRules, iptables.Rule{
-				Match:  iptables.Match().InInterface(prefix+"+").NotMarkMatchesWithMask(tcdefs.MarkSeen, tcdefs.MarkSeenMask),
+			inputRules = append(inputRules, nftables.Rule{
+				Match:  nftables.Match().InInterface(prefix+"+").NotMarkMatchesWithMask(tcdefs.MarkSeen, tcdefs.MarkSeenMask),
 				Action: d.ruleRenderer.IptablesFilterDenyAction(),
 			})
 		}
@@ -1501,15 +1502,15 @@ func (d *InternalDataplane) setUpIptablesBPF() {
 			// SEEN traffic, so it was policed and accepted at a HEP. If the default INPUT
 			// chain policy was DROP, it would get dropped now, therefore an explicit accept
 			// is needed.
-			inputRules = append(inputRules, rules.FilterInputChainAllowWG(t.IPVersion, rulesConfig, iptables.AcceptAction{})...)
+			inputRules = append(inputRules, rules.FilterInputChainAllowWG(t.IPVersion, rulesConfig, nftables.AcceptAction{})...)
 		}
 
 		if t.IPVersion == 6 {
 			if !d.config.BPFIpv6Enabled {
 				for _, prefix := range rulesConfig.WorkloadIfacePrefixes {
 					// In BPF ipv4 mode, drop ipv6 packets to pods.
-					fwdRules = append(fwdRules, iptables.Rule{
-						Match:   iptables.Match().OutInterface(prefix + "+"),
+					fwdRules = append(fwdRules, nftables.Rule{
+						Match:   nftables.Match().OutInterface(prefix + "+"),
 						Action:  d.ruleRenderer.IptablesFilterDenyAction(),
 						Comment: []string{"To workload, drop IPv6."},
 					})
@@ -1529,9 +1530,9 @@ func (d *InternalDataplane) setUpIptablesBPF() {
 			for _, prefix := range rulesConfig.WorkloadIfacePrefixes {
 				// Make sure iptables rules don't drop packets that we're about to process through BPF.
 				fwdRules = append(fwdRules,
-					iptables.Rule{
-						Match:   iptables.Match().OutInterface(prefix + "+"),
-						Action:  iptables.JumpAction{Target: rules.ChainToWorkloadDispatch},
+					nftables.Rule{
+						Match:   nftables.Match().OutInterface(prefix + "+"),
+						Action:  nftables.JumpAction{Target: rules.ChainToWorkloadDispatch},
 						Comment: []string{"To workload, check workload is known."},
 					},
 				)
@@ -1543,17 +1544,17 @@ func (d *InternalDataplane) setUpIptablesBPF() {
 			for _, prefix := range rulesConfig.WorkloadIfacePrefixes {
 				// Make sure iptables rules don't drop packets that we're about to process through BPF.
 				fwdRules = append(fwdRules,
-					iptables.Rule{
-						Match:   iptables.Match().InInterface(prefix + "+"),
-						Action:  iptables.AcceptAction{},
+					nftables.Rule{
+						Match:   nftables.Match().InInterface(prefix + "+"),
+						Action:  nftables.AcceptAction{},
 						Comment: []string{"To workload, mark has already been verified."},
 					},
 				)
 			}
 			fwdRules = append(fwdRules,
-				iptables.Rule{
-					Match:   iptables.Match().InInterface(bpfOutDev),
-					Action:  iptables.AcceptAction{},
+				nftables.Rule{
+					Match:   nftables.Match().InInterface(bpfOutDev),
+					Action:  nftables.AcceptAction{},
 					Comment: []string{"From ", bpfOutDev, " device, mark verified, accept."},
 				},
 			)
@@ -1566,8 +1567,8 @@ func (d *InternalDataplane) setUpIptablesBPF() {
 
 	for _, t := range d.iptablesNATTables {
 		t.UpdateChains(d.ruleRenderer.StaticNATPostroutingChains(t.IPVersion))
-		t.InsertOrAppendRules("POSTROUTING", []iptables.Rule{{
-			Action: iptables.JumpAction{Target: rules.ChainNATPostrouting},
+		t.InsertOrAppendRules("POSTROUTING", []nftables.Rule{{
+			Action: nftables.JumpAction{Target: rules.ChainNATPostrouting},
 		}})
 	}
 
@@ -1575,24 +1576,24 @@ func (d *InternalDataplane) setUpIptablesBPF() {
 		t.UpdateChains(d.ruleRenderer.StaticBPFModeRawChains(t.IPVersion,
 			d.config.Wireguard.EncryptHostTraffic, d.config.BPFHostConntrackBypass,
 		))
-		t.InsertOrAppendRules("PREROUTING", []iptables.Rule{{
-			Action: iptables.JumpAction{Target: rules.ChainRawPrerouting},
+		t.InsertOrAppendRules("PREROUTING", []nftables.Rule{{
+			Action: nftables.JumpAction{Target: rules.ChainRawPrerouting},
 		}})
-		t.InsertOrAppendRules("OUTPUT", []iptables.Rule{{
-			Action: iptables.JumpAction{Target: rules.ChainRawOutput},
+		t.InsertOrAppendRules("OUTPUT", []nftables.Rule{{
+			Action: nftables.JumpAction{Target: rules.ChainRawOutput},
 		}})
 	}
 
 	if d.config.BPFExtToServiceConnmark != 0 {
 		mark := uint32(d.config.BPFExtToServiceConnmark)
 		for _, t := range d.iptablesMangleTables {
-			t.InsertOrAppendRules("PREROUTING", []iptables.Rule{{
-				Match: iptables.Match().MarkMatchesWithMask(
+			t.InsertOrAppendRules("PREROUTING", []nftables.Rule{{
+				Match: nftables.Match().MarkMatchesWithMask(
 					tcdefs.MarkSeen|mark,
 					tcdefs.MarkSeenMask|mark,
 				),
 				Comment: []string{"Mark connections with ExtToServiceConnmark"},
-				Action:  iptables.SetConnMarkAction{Mark: mark, Mask: mark},
+				Action:  nftables.SetConnMarkAction{Mark: mark, Mask: mark},
 			}})
 		}
 	}
@@ -1638,24 +1639,24 @@ func (d *InternalDataplane) setUpIptablesNormal() {
 	for _, t := range d.iptablesRawTables {
 		rawChains := d.ruleRenderer.StaticRawTableChains(t.IPVersion)
 		t.UpdateChains(rawChains)
-		t.InsertOrAppendRules("PREROUTING", []iptables.Rule{{
-			Action: iptables.JumpAction{Target: rules.ChainRawPrerouting},
+		t.InsertOrAppendRules("PREROUTING", []nftables.Rule{{
+			Action: nftables.JumpAction{Target: rules.ChainRawPrerouting},
 		}})
-		t.InsertOrAppendRules("OUTPUT", []iptables.Rule{{
-			Action: iptables.JumpAction{Target: rules.ChainRawOutput},
+		t.InsertOrAppendRules("OUTPUT", []nftables.Rule{{
+			Action: nftables.JumpAction{Target: rules.ChainRawOutput},
 		}})
 	}
 	for _, t := range d.iptablesFilterTables {
 		filterChains := d.ruleRenderer.StaticFilterTableChains(t.IPVersion)
 		t.UpdateChains(filterChains)
-		t.InsertOrAppendRules("FORWARD", []iptables.Rule{{
-			Action: iptables.JumpAction{Target: rules.ChainFilterForward},
+		t.InsertOrAppendRules("FORWARD", []nftables.Rule{{
+			Action: nftables.JumpAction{Target: rules.ChainFilterForward},
 		}})
-		t.InsertOrAppendRules("INPUT", []iptables.Rule{{
-			Action: iptables.JumpAction{Target: rules.ChainFilterInput},
+		t.InsertOrAppendRules("INPUT", []nftables.Rule{{
+			Action: nftables.JumpAction{Target: rules.ChainFilterInput},
 		}})
-		t.InsertOrAppendRules("OUTPUT", []iptables.Rule{{
-			Action: iptables.JumpAction{Target: rules.ChainFilterOutput},
+		t.InsertOrAppendRules("OUTPUT", []nftables.Rule{{
+			Action: nftables.JumpAction{Target: rules.ChainFilterOutput},
 		}})
 
 		// Include rules which should be appended to the filter table forward chain.
@@ -1663,23 +1664,23 @@ func (d *InternalDataplane) setUpIptablesNormal() {
 	}
 	for _, t := range d.iptablesNATTables {
 		t.UpdateChains(d.ruleRenderer.StaticNATTableChains(t.IPVersion))
-		t.InsertOrAppendRules("PREROUTING", []iptables.Rule{{
-			Action: iptables.JumpAction{Target: rules.ChainNATPrerouting},
+		t.InsertOrAppendRules("PREROUTING", []nftables.Rule{{
+			Action: nftables.JumpAction{Target: rules.ChainNATPrerouting},
 		}})
-		t.InsertOrAppendRules("POSTROUTING", []iptables.Rule{{
-			Action: iptables.JumpAction{Target: rules.ChainNATPostrouting},
+		t.InsertOrAppendRules("POSTROUTING", []nftables.Rule{{
+			Action: nftables.JumpAction{Target: rules.ChainNATPostrouting},
 		}})
-		t.InsertOrAppendRules("OUTPUT", []iptables.Rule{{
-			Action: iptables.JumpAction{Target: rules.ChainNATOutput},
+		t.InsertOrAppendRules("OUTPUT", []nftables.Rule{{
+			Action: nftables.JumpAction{Target: rules.ChainNATOutput},
 		}})
 	}
 	for _, t := range d.iptablesMangleTables {
 		t.UpdateChains(d.ruleRenderer.StaticMangleTableChains(t.IPVersion))
-		t.InsertOrAppendRules("PREROUTING", []iptables.Rule{{
-			Action: iptables.JumpAction{Target: rules.ChainManglePrerouting},
+		t.InsertOrAppendRules("PREROUTING", []nftables.Rule{{
+			Action: nftables.JumpAction{Target: rules.ChainManglePrerouting},
 		}})
-		t.InsertOrAppendRules("POSTROUTING", []iptables.Rule{{
-			Action: iptables.JumpAction{Target: rules.ChainManglePostrouting},
+		t.InsertOrAppendRules("POSTROUTING", []nftables.Rule{{
+			Action: nftables.JumpAction{Target: rules.ChainManglePostrouting},
 		}})
 	}
 	if d.xdpState != nil {
@@ -2126,7 +2127,7 @@ func (d *InternalDataplane) apply() {
 	}
 
 	// Next, create/update IP sets.  We defer deletions of IP sets until after we update
-	// iptables.
+	// nftables.
 	var ipSetsWG sync.WaitGroup
 	for _, ipSets := range d.ipSets {
 		ipSetsWG.Add(1)
@@ -2192,7 +2193,7 @@ func (d *InternalDataplane) apply() {
 	var iptablesWG sync.WaitGroup
 	for _, t := range d.allIptablesTables {
 		iptablesWG.Add(1)
-		go func(t *iptables.Table) {
+		go func(t *nftables.Table) {
 			tableReschedAfter := t.Apply()
 
 			reschedDelayMutex.Lock()
@@ -2295,11 +2296,11 @@ func (d *InternalDataplane) loopReportingStatus() {
 	}
 }
 
-// IptablesTable is a shim interface for iptables.Table.
+// IptablesTable is a shim interface for nftables.Table.
 type IptablesTable interface {
-	UpdateChain(chain *iptables.Chain)
-	UpdateChains([]*iptables.Chain)
-	RemoveChains([]*iptables.Chain)
+	UpdateChain(chain *nftables.Chain)
+	UpdateChains([]*nftables.Chain)
+	RemoveChains([]*nftables.Chain)
 	RemoveChainByName(name string)
 }
 
@@ -2325,8 +2326,8 @@ func startBPFDataplaneComponents(ipFamily proto.IPVersion,
 	ipSetIDAllocator *idalloc.IDAllocator,
 	config Config,
 	ipSetsMgr *common.IPSetsManager,
-	dp *InternalDataplane) {
-
+	dp *InternalDataplane,
+) {
 	ipSetConfig := config.RulesConfig.IPSetConfigV4
 	ipSetEntry := bpfipsets.IPSetEntryFromBytes
 	ipSetProtoEntry := bpfipsets.ProtoIPSetMemberToBPFEntry

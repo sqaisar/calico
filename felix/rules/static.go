@@ -20,8 +20,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	tcdefs "github.com/projectcalico/calico/felix/bpf/tc/defs"
-	"github.com/projectcalico/calico/felix/iptables"
-	. "github.com/projectcalico/calico/felix/iptables"
+	. "github.com/projectcalico/calico/felix/nftables"
 	"github.com/projectcalico/calico/felix/proto"
 	cnet "github.com/projectcalico/calico/libcalico-go/lib/net"
 )
@@ -206,7 +205,7 @@ func (r *DefaultRuleRenderer) StaticFilterOutputForwardEndpointMarkChain() *Chai
 	}
 }
 
-func FilterInputChainAllowWG(ipVersion uint8, r Config, allowAction iptables.Action) []Rule {
+func FilterInputChainAllowWG(ipVersion uint8, r Config, allowAction Action) []Rule {
 	var inputRules []Rule
 
 	if ipVersion == 4 && r.WireguardEnabled {
@@ -368,7 +367,7 @@ func (r *DefaultRuleRenderer) filterInputChain(ipVersion uint8) *Chain {
 	}
 }
 
-func ICMPv6Filter(action iptables.Action) []Rule {
+func ICMPv6Filter(action Action) []Rule {
 	var rules []Rule
 
 	// For IPv6, we need to allow certain ICMP traffic from workloads in order to act
@@ -1131,8 +1130,8 @@ func (r *DefaultRuleRenderer) StaticRawTableChains(ipVersion uint8) []*Chain {
 }
 
 func (r *DefaultRuleRenderer) StaticBPFModeRawChains(ipVersion uint8,
-	wgEncryptHost, bypassHostConntrack bool) []*Chain {
-
+	wgEncryptHost, bypassHostConntrack bool,
+) []*Chain {
 	var rawRules []Rule
 
 	if ((r.WireguardEnabled && len(r.WireguardInterfaceName) > 0) || (r.WireguardEnabledV6 && len(r.WireguardInterfaceNameV6) > 0)) && wgEncryptHost {
@@ -1229,11 +1228,11 @@ func (r *DefaultRuleRenderer) StaticBPFModeRawChains(ipVersion uint8,
 			// mark.  Note that we can clear the mark without stomping on anyone else's
 			// logic because no one else's iptables should have had a chance to execute
 			// yet.
-			Rule{
+			{
 				Action: SetMarkAction{Mark: 0},
 			},
 			// Now ensure that the packet is not tracked.
-			Rule{
+			{
 				Action: NoTrackAction{},
 			},
 		},
@@ -1296,13 +1295,17 @@ func (r *DefaultRuleRenderer) StaticRawPreroutingChain(ipVersion uint8) *Chain {
 
 	rules = append(rules,
 		// Send non-workload traffic to the untracked policy chains.
-		Rule{Match: Match().MarkClear(markFromWorkload),
-			Action: JumpAction{Target: ChainDispatchFromHostEndpoint}},
+		Rule{
+			Match:  Match().MarkClear(markFromWorkload),
+			Action: JumpAction{Target: ChainDispatchFromHostEndpoint},
+		},
 		// Then, if the packet was marked as allowed, accept it.  Packets also return here
 		// without the mark bit set if the interface wasn't one that we're policing.  We
 		// let those packets fall through to the user's policy.
-		Rule{Match: Match().MarkSingleBitSet(r.IptablesMarkAccept),
-			Action: AcceptAction{}},
+		Rule{
+			Match:  Match().MarkSingleBitSet(r.IptablesMarkAccept),
+			Action: AcceptAction{},
+		},
 	)
 
 	return &Chain{
@@ -1406,15 +1409,21 @@ func (r *DefaultRuleRenderer) StaticRawOutputChain(tcBypassMark uint32) *Chain {
 	}
 	if tcBypassMark == 0 {
 		rules = append(rules, []Rule{
-			{Match: Match().MarkSingleBitSet(r.IptablesMarkAccept),
-				Action: AcceptAction{}},
+			{
+				Match:  Match().MarkSingleBitSet(r.IptablesMarkAccept),
+				Action: AcceptAction{},
+			},
 		}...)
 	} else {
 		rules = append(rules, []Rule{
-			{Match: Match().MarkSingleBitSet(r.IptablesMarkAccept),
-				Action: SetMaskedMarkAction{Mark: tcBypassMark, Mask: 0xffffffff}},
-			{Match: Match().MarkMatchesWithMask(tcBypassMark, 0xffffffff),
-				Action: AcceptAction{}},
+			{
+				Match:  Match().MarkSingleBitSet(r.IptablesMarkAccept),
+				Action: SetMaskedMarkAction{Mark: tcBypassMark, Mask: 0xffffffff},
+			},
+			{
+				Match:  Match().MarkMatchesWithMask(tcBypassMark, 0xffffffff),
+				Action: AcceptAction{},
+			},
 		}...)
 	}
 	return &Chain{

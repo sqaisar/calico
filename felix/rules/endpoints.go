@@ -24,7 +24,7 @@ import (
 	"golang.org/x/crypto/sha3"
 
 	"github.com/projectcalico/calico/felix/hashutils"
-	. "github.com/projectcalico/calico/felix/iptables"
+	. "github.com/projectcalico/calico/felix/nftables"
 	"github.com/projectcalico/calico/felix/proto"
 )
 
@@ -303,7 +303,8 @@ func (r *DefaultRuleRenderer) endpointSetMarkChain(
 		rules = append(rules, Rule{
 			Action: SetMaskedMarkAction{
 				Mark: endPointMark,
-				Mask: epMarkMapper.GetMask()},
+				Mask: epMarkMapper.GetMask(),
+			},
 		})
 	}
 	return &Chain{
@@ -311,6 +312,7 @@ func (r *DefaultRuleRenderer) endpointSetMarkChain(
 		Rules: rules,
 	}
 }
+
 func (r *DefaultRuleRenderer) PolicyGroupToIptablesChains(group *PolicyGroup) []*Chain {
 	rules := make([]Rule, 0, len(group.PolicyNames)*2-1)
 	polChainPrefix := PolicyInboundPfx

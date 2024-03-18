@@ -17,7 +17,7 @@ package intdataplane
 import (
 	"reflect"
 
-	"github.com/projectcalico/calico/felix/iptables"
+	"github.com/projectcalico/calico/felix/nftables"
 	"github.com/projectcalico/calico/felix/proto"
 	"github.com/projectcalico/calico/felix/rules"
 )
@@ -39,7 +39,7 @@ type serviceLoopManager struct {
 	ruleRenderer rules.RuleRenderer
 
 	// Internal state.
-	activeFilterChains     []*iptables.Chain
+	activeFilterChains     []*nftables.Chain
 	pendingGlobalBGPConfig *proto.GlobalBGPConfigUpdate
 }
 
@@ -52,7 +52,7 @@ func newServiceLoopManager(
 		ipVersion:              ipVersion,
 		filterTable:            filterTable,
 		ruleRenderer:           ruleRenderer,
-		activeFilterChains:     []*iptables.Chain{},
+		activeFilterChains:     []*nftables.Chain{},
 		pendingGlobalBGPConfig: &proto.GlobalBGPConfigUpdate{},
 	}
 }
