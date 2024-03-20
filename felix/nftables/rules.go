@@ -103,7 +103,13 @@ func (r Rule) renderInner(fragments []string, prefixFragment string, features *e
 			fragments = append(fragments, actionFragment)
 		}
 	}
-	return strings.Join(fragments, " ")
+	inner := strings.Join(fragments, " ")
+	if len(inner) == 0 {
+		// If the rule is empty, it will cause nft to fail with a cryptic error message.
+		// Instead, we'll just use a counter.
+		return "counter"
+	}
+	return inner
 }
 
 var shellUnsafe = regexp.MustCompile(`[^\w @%+=:,./-]`)
@@ -196,7 +202,6 @@ func (c *Chain) RuleHashes(features *environment.Features) []string {
 	return hashes
 }
 
-// CASEY: TOOD: What is this used for?
 func (c *Chain) IPSetNames() (ipSetNames []string) {
 	if c == nil {
 		return nil

@@ -248,13 +248,18 @@ func (m MatchCriteria) NotDestIPPortSet(name string) MatchCriteria {
 }
 
 func (m MatchCriteria) IPSetNames() (ipSetNames []string) {
-	// TODO: CASEY: Where is this used?
 	for _, matchString := range []string(m) {
-		words := strings.Split(matchString, " ")
-		for i := range words {
-			if words[i] == "--match-set" && (i+1) < len(words) {
-				ipSetNames = append(ipSetNames, words[i+1])
-			}
+		if strings.Contains(matchString, "ip saddr @") {
+			ipSetNames = append(ipSetNames, strings.TrimPrefix(strings.Split(matchString, " ")[2], "@"))
+		}
+		if strings.Contains(matchString, "ip daddr @") {
+			ipSetNames = append(ipSetNames, strings.TrimPrefix(strings.Split(matchString, " ")[2], "@"))
+		}
+		if strings.Contains(matchString, "ip saddr != @") {
+			ipSetNames = append(ipSetNames, strings.TrimPrefix(strings.Split(matchString, " ")[3], "@"))
+		}
+		if strings.Contains(matchString, "ip daddr != @") {
+			ipSetNames = append(ipSetNames, strings.TrimPrefix(strings.Split(matchString, " ")[3], "@"))
 		}
 	}
 	return
@@ -273,6 +278,11 @@ func (m MatchCriteria) NotSourcePorts(ports ...uint16) MatchCriteria {
 func (m MatchCriteria) DestPorts(ports ...uint16) MatchCriteria {
 	portsString := PortsToMultiport(ports)
 	return append(m, fmt.Sprintf("tcp dport %s", portsString))
+}
+
+func (m MatchCriteria) UDPDestPorts(ports ...uint16) MatchCriteria {
+	portsString := PortsToMultiport(ports)
+	return append(m, fmt.Sprintf("udp dport %s", portsString))
 }
 
 func (m MatchCriteria) NotDestPorts(ports ...uint16) MatchCriteria {

@@ -937,7 +937,15 @@ func (t *Table) applyUpdates() error {
 
 	// Start a new nftables transaction.
 	tx := t.nft.NewTransaction()
+
+	// Add the table, as it must always exist and isn't created by default.
 	tx.Add(&knftables.Table{})
+
+	// Also make sure our base chains exist.
+	for _, kernelChain := range tableToChains[t.Name] {
+		// TODO: These need hooks / priority / etc.
+		tx.Add(&knftables.Chain{Name: kernelChain})
+	}
 
 	// Make a pass over the dirty chains and generate a forward reference for any that we're about to update.
 	// Writing a forward reference ensures that the chain exists and that it is empty.
@@ -962,6 +970,13 @@ func (t *Table) applyUpdates() error {
 			previousHashes = t.chainToDataplaneHashes[chainName]
 			currentHashes := chain.RuleHashes(features)
 			newHashes[chainName] = currentHashes
+
+			// Make sure maps are created for the chain, as nft will faill the transaction
+			// if there are unreferenced maps.
+			for _, mapName := range chain.IPSetNames() {
+				tx.Add(&knftables.Set{Name: mapName, Type: "ipv4_addr"})
+			}
+
 			for i := 0; i < len(previousHashes) || i < len(currentHashes); i++ {
 				if i < len(previousHashes) && i < len(currentHashes) {
 					if previousHashes[i] == currentHashes[i] {
@@ -1080,6 +1095,7 @@ func (t *Table) applyUpdates() error {
 		t.opReporter.RecordOperation(fmt.Sprintf("update-%v-v%d", t.Name, t.IPVersion))
 
 		if err := t.nft.Run(context.TODO(), tx); err != nil {
+			log.WithField("tx", tx.String()).Error("Failed to run nft transaction")
 			return fmt.Errorf("error performing nft transaction: %s", err)
 		}
 
@@ -1167,7 +1183,8 @@ func (t *Table) InsertRulesNow(chain string, rules []Rule) error {
 
 	// Run the transaction.
 	if err := t.nft.Run(context.TODO(), tx); err != nil {
-		return fmt.Errorf("error performing nft transaction: %s", err)
+		log.WithField("tx", tx.String()).Error("Failed to run InsertRulesNow nft transaction")
+		return fmt.Errorf("error performing InsertRulesNow nft transaction: %s", err)
 	}
 
 	return nil
