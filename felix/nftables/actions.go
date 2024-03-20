@@ -193,7 +193,7 @@ type ClearMarkAction struct {
 }
 
 func (c ClearMarkAction) ToFragment(features *environment.Features) string {
-	return fmt.Sprintf("meta mark 0/%#x", c.Mark)
+	return fmt.Sprintf("meta mark set mark & %#x", (c.Mark ^ 0xffffffff))
 }
 
 func (c ClearMarkAction) String() string {
@@ -206,7 +206,7 @@ type SetMarkAction struct {
 }
 
 func (c SetMarkAction) ToFragment(features *environment.Features) string {
-	return fmt.Sprintf("meta mark %#x/%#x", c.Mark, c.Mark)
+	return fmt.Sprintf("meta mark set %#x", c.Mark)
 }
 
 func (c SetMarkAction) String() string {
@@ -220,7 +220,7 @@ type SetMaskedMarkAction struct {
 }
 
 func (c SetMaskedMarkAction) ToFragment(features *environment.Features) string {
-	return fmt.Sprintf("meta mark %#x/%#x", c.Mark, c.Mask)
+	return fmt.Sprintf("meta mark set mark or %#x", (c.Mark & c.Mask))
 }
 
 func (c SetMaskedMarkAction) String() string {
@@ -254,7 +254,7 @@ func (c SaveConnMarkAction) ToFragment(features *environment.Features) string {
 	} else {
 		mask = c.SaveMask
 	}
-	return fmt.Sprintf("ct mark %#x", mask)
+	return fmt.Sprintf("ct mark set %#x", mask)
 }
 
 func (c SaveConnMarkAction) String() string {
@@ -297,7 +297,7 @@ func (c SetConnMarkAction) ToFragment(features *environment.Features) string {
 	} else {
 		mask = c.Mask
 	}
-	return fmt.Sprintf("ct mark set %#x/%#x", c.Mark, mask)
+	return fmt.Sprintf("ct mark set mark & %#x", (c.Mark & mask))
 }
 
 func (c SetConnMarkAction) String() string {

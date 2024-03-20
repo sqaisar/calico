@@ -450,26 +450,26 @@ func NewIntDataplaneDriver(config Config) *InternalDataplane {
 	// CASEY
 	// Create nftables tables.
 	mangleTableV4 := nftables.NewTable(
-		"mangle",
+		"cali-mangle",
 		4,
 		rules.RuleHashPrefix,
 		featureDetector,
 		iptablesOptions)
 	natTableV4 := nftables.NewTable(
-		"nat",
+		"cali-nat",
 		4,
 		rules.RuleHashPrefix,
 		featureDetector,
 		iptablesNATOptions,
 	)
 	rawTableV4 := nftables.NewTable(
-		"raw",
+		"cali-raw",
 		4,
 		rules.RuleHashPrefix,
 		featureDetector,
 		iptablesOptions)
 	filterTableV4 := nftables.NewTable(
-		"filter",
+		"cali-filter",
 		4,
 		rules.RuleHashPrefix,
 		featureDetector,
@@ -584,7 +584,7 @@ func NewIntDataplaneDriver(config Config) *InternalDataplane {
 	ipsetsManager := common.NewIPSetsManager("ipv4", ipSetsV4, config.MaxIPSetSize)
 	ipsetsManagerV6 := common.NewIPSetsManager("ipv6", nil, config.MaxIPSetSize)
 	filterTableV6 := nftables.NewTable(
-		"filter",
+		"cali-filter",
 		6,
 		rules.RuleHashPrefix,
 		featureDetector,
@@ -812,21 +812,21 @@ func NewIntDataplaneDriver(config Config) *InternalDataplane {
 
 	if config.IPv6Enabled {
 		mangleTableV6 := nftables.NewTable(
-			"mangle",
+			"cali-mangle",
 			6,
 			rules.RuleHashPrefix,
 			featureDetector,
 			iptablesOptions,
 		)
 		natTableV6 := nftables.NewTable(
-			"nat",
+			"cali-nat",
 			6,
 			rules.RuleHashPrefix,
 			featureDetector,
 			iptablesNATOptions,
 		)
 		rawTableV6 := nftables.NewTable(
-			"raw",
+			"cali-raw",
 			6,
 			rules.RuleHashPrefix,
 			featureDetector,
@@ -1443,7 +1443,7 @@ func (d *InternalDataplane) setUpIptablesBPF() {
 			fwdRules = append(fwdRules,
 				// Drop/reject packets that have come from a workload but have not been through our BPF program.
 				nftables.Rule{
-					Match:   nftables.Match().InInterface(prefix+"+").NotMarkMatchesWithMask(tcdefs.MarkSeen, tcdefs.MarkSeenMask),
+					Match:   nftables.Match().InInterface(prefix+"*").NotMarkMatchesWithMask(tcdefs.MarkSeen, tcdefs.MarkSeenMask),
 					Action:  d.ruleRenderer.IptablesFilterDenyAction(),
 					Comment: []string{"From workload without BPF seen mark"},
 				},
@@ -1453,14 +1453,14 @@ func (d *InternalDataplane) setUpIptablesBPF() {
 				// Only need to worry about ACCEPT here.  Drop gets compiled into the BPF program and
 				// RETURN would be a no-op since there's nothing to RETURN from.
 				inputRules = append(inputRules, nftables.Rule{
-					Match:  nftables.Match().InInterface(prefix+"+").MarkMatchesWithMask(tcdefs.MarkSeen, tcdefs.MarkSeenMask),
+					Match:  nftables.Match().InInterface(prefix+"*").MarkMatchesWithMask(tcdefs.MarkSeen, tcdefs.MarkSeenMask),
 					Action: nftables.AcceptAction{},
 				})
 			}
 
 			// Catch any workload to host packets that haven't been through the BPF program.
 			inputRules = append(inputRules, nftables.Rule{
-				Match:  nftables.Match().InInterface(prefix+"+").NotMarkMatchesWithMask(tcdefs.MarkSeen, tcdefs.MarkSeenMask),
+				Match:  nftables.Match().InInterface(prefix+"*").NotMarkMatchesWithMask(tcdefs.MarkSeen, tcdefs.MarkSeenMask),
 				Action: d.ruleRenderer.IptablesFilterDenyAction(),
 			})
 		}
@@ -1478,7 +1478,7 @@ func (d *InternalDataplane) setUpIptablesBPF() {
 				for _, prefix := range rulesConfig.WorkloadIfacePrefixes {
 					// In BPF ipv4 mode, drop ipv6 packets to pods.
 					fwdRules = append(fwdRules, nftables.Rule{
-						Match:   nftables.Match().OutInterface(prefix + "+"),
+						Match:   nftables.Match().OutInterface(prefix + "*"),
 						Action:  d.ruleRenderer.IptablesFilterDenyAction(),
 						Comment: []string{"To workload, drop IPv6."},
 					})
@@ -1499,7 +1499,7 @@ func (d *InternalDataplane) setUpIptablesBPF() {
 				// Make sure iptables rules don't drop packets that we're about to process through BPF.
 				fwdRules = append(fwdRules,
 					nftables.Rule{
-						Match:   nftables.Match().OutInterface(prefix + "+"),
+						Match:   nftables.Match().OutInterface(prefix + "*"),
 						Action:  nftables.JumpAction{Target: rules.ChainToWorkloadDispatch},
 						Comment: []string{"To workload, check workload is known."},
 					},
@@ -1513,7 +1513,7 @@ func (d *InternalDataplane) setUpIptablesBPF() {
 				// Make sure iptables rules don't drop packets that we're about to process through BPF.
 				fwdRules = append(fwdRules,
 					nftables.Rule{
-						Match:   nftables.Match().InInterface(prefix + "+"),
+						Match:   nftables.Match().InInterface(prefix + "*"),
 						Action:  nftables.AcceptAction{},
 						Comment: []string{"To workload, mark has already been verified."},
 					},

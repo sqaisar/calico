@@ -91,11 +91,11 @@ func (m MatchCriteria) NotMarkMatchesWithMask(mark, mask uint32) MatchCriteria {
 }
 
 func (m MatchCriteria) InInterface(ifaceMatch string) MatchCriteria {
-	return append(m, fmt.Sprintf("iif %s", ifaceMatch))
+	return append(m, fmt.Sprintf("iifname %s", ifaceMatch))
 }
 
 func (m MatchCriteria) OutInterface(ifaceMatch string) MatchCriteria {
-	return append(m, fmt.Sprintf("oif %s", ifaceMatch))
+	return append(m, fmt.Sprintf("oifname %s", ifaceMatch))
 }
 
 func (m MatchCriteria) RPFCheckPassed(acceptLocal bool) MatchCriteria {
@@ -108,10 +108,11 @@ func (m MatchCriteria) RPFCheckPassed(acceptLocal bool) MatchCriteria {
 }
 
 func (m MatchCriteria) RPFCheckFailed(acceptLocal bool) MatchCriteria {
-	// TODO: CASEY
-	ret := append(m, "-m rpfilter --invert --validmark")
+	// TODO: CASEY - is this right?
+	// https://wiki.nftables.org/wiki-nftables/index.php/Matching_routing_information
+	ret := append(m, "fib saddr . iif oif eq 0")
 	if acceptLocal {
-		ret = append(ret, "--accept-local")
+		// ret = append(ret, "--accept-local")
 	}
 	return ret
 }
@@ -162,12 +163,20 @@ func (m MatchCriteria) NotDestAddrType(addrType AddrType) MatchCriteria {
 	return append(m, fmt.Sprintf("fib daddr type != %s", addrType))
 }
 
+func (m MatchCriteria) ConntrackStatus(statusNames string) MatchCriteria {
+	return append(m, fmt.Sprintf("ct status %s", strings.ToLower(statusNames)))
+}
+
+func (m MatchCriteria) NotConntrackStatus(statusNames string) MatchCriteria {
+	return append(m, fmt.Sprintf("ct status != %s", strings.ToLower(statusNames)))
+}
+
 func (m MatchCriteria) ConntrackState(stateNames string) MatchCriteria {
-	return append(m, fmt.Sprintf("ct state %s", stateNames))
+	return append(m, fmt.Sprintf("ct state %s", strings.ToLower(stateNames)))
 }
 
 func (m MatchCriteria) NotConntrackState(stateNames string) MatchCriteria {
-	return append(m, fmt.Sprintf("ct state != %s", stateNames))
+	return append(m, fmt.Sprintf("ct state != %s", strings.ToLower(stateNames)))
 }
 
 func (m MatchCriteria) Protocol(name string) MatchCriteria {
@@ -225,7 +234,7 @@ func (m MatchCriteria) DestIPSet(name string) MatchCriteria {
 }
 
 func (m MatchCriteria) NotDestIPSet(name string) MatchCriteria {
-	return append(m, fmt.Sprintf("ip daddr != %s", name))
+	return append(m, fmt.Sprintf("ip daddr != @%s", name))
 }
 
 func (m MatchCriteria) DestIPPortSet(name string) MatchCriteria {

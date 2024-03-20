@@ -192,7 +192,7 @@ func (r *DefaultRuleRenderer) hostDispatchChains(
 		// going to a local workload.
 		if !applyOnForward {
 			for _, prefix := range r.WorkloadIfacePrefixes {
-				ifaceMatch := prefix + "+"
+				ifaceMatch := prefix + "*"
 				toEndRules = append(toEndRules, Rule{
 					Match:   Match().OutInterface(ifaceMatch),
 					Action:  ReturnAction{},
@@ -378,7 +378,7 @@ func (r *DefaultRuleRenderer) endpointMarkDispatchChains(
 	// but felix has not yet got an endpoint for it, drop packet.
 	// For instance, cni created a pod but felix has not got the workload endpoint update yet.
 	for _, prefix := range r.WorkloadIfacePrefixes {
-		ifaceMatch := prefix + "+"
+		ifaceMatch := prefix + "*"
 		rootSetMarkRules = append(rootSetMarkRules, Rule{
 			Match:   Match().InInterface(ifaceMatch),
 			Action:  r.IptablesFilterDenyAction(),
@@ -475,7 +475,7 @@ func (r *DefaultRuleRenderer) buildSingleDispatchChains(
 		if len(ifaceNames) > 1 {
 			// More than one name, render a prefix match in the root chain...
 			nextChar := prefix[len(commonPrefix):]
-			ifaceMatch := prefix + "+"
+			ifaceMatch := prefix + "*"
 			childChainName := chainName + "-" + nextChar
 			logCxt := logCxt.WithFields(log.Fields{
 				"childChainName": childChainName,

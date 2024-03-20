@@ -156,7 +156,7 @@ func (r *DefaultRuleRenderer) StaticFilterOutputForwardEndpointMarkChain() *Chai
 	// interface-name-based dispatch chains.
 	for _, prefix := range r.WorkloadIfacePrefixes {
 		log.WithField("ifacePrefix", prefix).Debug("Adding workload match rules")
-		ifaceMatch := prefix + "+"
+		ifaceMatch := prefix + "*"
 		fwRules = append(fwRules,
 			Rule{
 				Match:  Match().OutInterface(ifaceMatch),
@@ -334,7 +334,7 @@ func (r *DefaultRuleRenderer) filterInputChain(ipVersion uint8) *Chain {
 	// Apply our policy to packets coming from workload endpoints.
 	for _, prefix := range r.WorkloadIfacePrefixes {
 		log.WithField("ifacePrefix", prefix).Debug("Adding workload match rules")
-		ifaceMatch := prefix + "+"
+		ifaceMatch := prefix + "*"
 		inputRules = append(inputRules, Rule{
 			Match:  Match().InInterface(ifaceMatch),
 			Action: GotoAction{Target: ChainWorkloadToHost},
@@ -634,7 +634,7 @@ func (r *DefaultRuleRenderer) StaticFilterForwardChains() []*Chain {
 	// Jump to workload dispatch chains.
 	for _, prefix := range r.WorkloadIfacePrefixes {
 		log.WithField("ifacePrefix", prefix).Debug("Adding workload match rules")
-		ifaceMatch := prefix + "+"
+		ifaceMatch := prefix + "*"
 		rules = append(rules,
 			Rule{
 				Match:  Match().InInterface(ifaceMatch),
@@ -731,7 +731,7 @@ func (r *DefaultRuleRenderer) filterOutputChain(ipVersion uint8) *Chain {
 		// If the packet is going to a workload endpoint, apply workload ingress policy if traffic
 		// belongs to an IPVS connection and return at the end.
 		log.WithField("ifacePrefix", prefix).Debug("Adding workload match rules")
-		ifaceMatch := prefix + "+"
+		ifaceMatch := prefix + "*"
 		rules = append(rules,
 			Rule{
 				// if packet goes to a workload endpoint. set return action properly.
@@ -836,7 +836,7 @@ func (r *DefaultRuleRenderer) filterOutputChain(ipVersion uint8) *Chain {
 			Action: ClearMarkAction{Mark: r.allCalicoMarkBits()},
 		},
 		Rule{
-			Match:  Match().NotConntrackState("DNAT"),
+			Match:  Match().NotConntrackStatus("DNAT"),
 			Action: JumpAction{Target: ChainDispatchToHostEndpoint},
 		},
 		Rule{
@@ -1103,7 +1103,7 @@ func (r *DefaultRuleRenderer) StaticManglePostroutingChain(ipVersion uint8) *Cha
 			Action: ClearMarkAction{Mark: r.allCalicoMarkBits()},
 		},
 		Rule{
-			Match:  Match().ConntrackState("DNAT"),
+			Match:  Match().ConntrackStatus("DNAT"),
 			Action: JumpAction{Target: ChainDispatchToHostEndpoint},
 		},
 		Rule{
@@ -1274,7 +1274,7 @@ func (r *DefaultRuleRenderer) StaticRawPreroutingChain(ipVersion uint8) *Chain {
 	markFromWorkload := r.IptablesMarkScratch0
 	for _, ifacePrefix := range r.WorkloadIfacePrefixes {
 		rules = append(rules, Rule{
-			Match:  Match().InInterface(ifacePrefix + "+"),
+			Match:  Match().InInterface(ifacePrefix + "*"),
 			Action: SetMarkAction{Mark: markFromWorkload},
 		})
 	}
@@ -1383,7 +1383,7 @@ func (r *DefaultRuleRenderer) WireguardIncomingMarkChain() *Chain {
 
 	for _, ifacePrefix := range r.WorkloadIfacePrefixes {
 		rules = append(rules, Rule{
-			Match:  Match().InInterface(fmt.Sprintf("%s+", ifacePrefix)),
+			Match:  Match().InInterface(fmt.Sprintf("%s*", ifacePrefix)),
 			Action: ReturnAction{},
 		})
 	}

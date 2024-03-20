@@ -43,7 +43,7 @@ type Rule struct {
 func (r Rule) Render(chain string, prefixFragment string, features *environment.Features) *knftables.Rule {
 	return &knftables.Rule{
 		Chain:   chain,
-		Rule:    r.renderInner([]string{}, "", nil),
+		Rule:    r.renderInner([]string{}, "", features),
 		Comment: r.comment(prefixFragment),
 	}
 }
@@ -79,7 +79,7 @@ func (r Rule) comment(prefixFragment string) *string {
 	for _, c := range r.Comment {
 		c = escapeComment(c)
 		c = truncateComment(c)
-		commentFragment := fmt.Sprintf("comment \"%s; %s\"", prefixFragment, c)
+		commentFragment := fmt.Sprintf("%s; %s", prefixFragment, c)
 		fragments = append(fragments, commentFragment)
 	}
 	cmt := strings.Join(fragments, " ")

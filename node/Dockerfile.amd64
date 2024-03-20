@@ -104,7 +104,7 @@ COPY --from=centos  /root/rpmbuild/RPMS/x86_64/* /tmp/rpms/
 # gzip >= 1.9-13.el8_5
 # cryptsetup-libs >= 2.3.3-4.el8_5.1
 # nft >= 1.0.1
-RUN microdnf install gzip cryptsetup-libs nftables
+RUN microdnf install gzip cryptsetup-libs nftables libnftnl
 
 # Install the necessary packages, making sure that we're using only CentOS repos.
 # Since the ubi repos do not contain all the packages we need (they're missing conntrack-tools),
@@ -142,7 +142,7 @@ RUN rm /etc/yum.repos.d/ubi.repo && \
     rpm --force -i /tmp/rpms/iptables-libs-${IPTABLES_VER}.el8.x86_64.rpm && \
     rpm --force -i /tmp/rpms/iptables-legacy-libs-${IPTABLES_VER}.el8.2.x86_64.rpm && \
     # Install compatible libnftnl version with selected iptables version
-    rpm --force -i /tmp/rpms/libnftnl-${LIBNFTNL_VER}.el8.x86_64.rpm && \
+    # rpm --force -i /tmp/rpms/libnftnl-${LIBNFTNL_VER}.el8.x86_64.rpm && \
     # Install both and select at runtime.
     rpm -i /tmp/rpms/iptables-legacy-${IPTABLES_VER}.el8.2.x86_64.rpm && \
     rpm -i /tmp/rpms/iptables-nft-${IPTABLES_VER}.el8.x86_64.rpm && \

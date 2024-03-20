@@ -792,6 +792,9 @@ func (t *Table) attemptToGetHashesAndRulesFromDataplane() (hashes map[string][]s
 	}
 	countNumSaveCalls.Inc()
 
+	hashes = make(map[string][]string)
+	rules = make(map[string][]*knftables.Rule)
+
 	for _, chain := range chains {
 		hashes[chain] = []string{}
 		rulesInChain, err := t.nft.ListRules(context.TODO(), chain)
@@ -934,6 +937,7 @@ func (t *Table) applyUpdates() error {
 
 	// Start a new nftables transaction.
 	tx := t.nft.NewTransaction()
+	tx.Add(&knftables.Table{})
 
 	// Make a pass over the dirty chains and generate a forward reference for any that we're about to update.
 	// Writing a forward reference ensures that the chain exists and that it is empty.
@@ -1154,6 +1158,7 @@ func (t *Table) InsertRulesNow(chain string, rules []Rule) error {
 	hashes := CalculateRuleHashes(chain, rules, features)
 
 	tx := t.nft.NewTransaction()
+	tx.Add(&knftables.Table{})
 	for i, r := range rules {
 		prefixFrag := t.commentFrag(hashes[i])
 		// buf.WriteLine(r.RenderInsertAtRuleNumber(t.Name, chain, i+1, prefixFrag, features))
