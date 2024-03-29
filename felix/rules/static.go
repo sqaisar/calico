@@ -274,7 +274,7 @@ func (r *DefaultRuleRenderer) filterInputChain(ipVersion uint8) *Chain {
 		inputRules = append(inputRules,
 			Rule{
 				Match: Match().ProtocolNum(ProtoUDP).
-					DestPorts(uint16(r.Config.VXLANPort)).
+					UDPDestPorts(uint16(r.Config.VXLANPort)).
 					SourceIPSet(r.IPSetConfigV4.NameForMainIPSet(IPSetIDAllVXLANSourceNets)).
 					DestAddrType(AddrTypeLocal),
 				Action:  r.filterAllowAction,
@@ -282,7 +282,7 @@ func (r *DefaultRuleRenderer) filterInputChain(ipVersion uint8) *Chain {
 			},
 			Rule{
 				Match: Match().ProtocolNum(ProtoUDP).
-					DestPorts(uint16(r.Config.VXLANPort)).
+					UDPDestPorts(uint16(r.Config.VXLANPort)).
 					DestAddrType(AddrTypeLocal),
 				Action:  DropAction{},
 				Comment: []string{"Drop IPv4 VXLAN packets from non-allowed hosts"},
@@ -296,7 +296,7 @@ func (r *DefaultRuleRenderer) filterInputChain(ipVersion uint8) *Chain {
 		inputRules = append(inputRules,
 			Rule{
 				Match: Match().ProtocolNum(ProtoUDP).
-					DestPorts(uint16(r.Config.VXLANPort)).
+					UDPDestPorts(uint16(r.Config.VXLANPort)).
 					SourceIPSet(r.IPSetConfigV6.NameForMainIPSet(IPSetIDAllVXLANSourceNets)).
 					DestAddrType(AddrTypeLocal),
 				Action:  r.filterAllowAction,
@@ -304,7 +304,7 @@ func (r *DefaultRuleRenderer) filterInputChain(ipVersion uint8) *Chain {
 			},
 			Rule{
 				Match: Match().ProtocolNum(ProtoUDP).
-					DestPorts(uint16(r.Config.VXLANPort)).
+					UDPDestPorts(uint16(r.Config.VXLANPort)).
 					DestAddrType(AddrTypeLocal),
 				Action:  r.IptablesFilterDenyAction(),
 				Comment: []string{fmt.Sprintf("%s IPv6 VXLAN packets from non-allowed hosts", r.IptablesFilterDenyAction())},
@@ -766,7 +766,7 @@ func (r *DefaultRuleRenderer) filterOutputChain(ipVersion uint8) *Chain {
 		rules = append(rules,
 			Rule{
 				Match: Match().ProtocolNum(ProtoUDP).
-					DestPorts(uint16(r.Config.VXLANPort)).
+					UDPDestPorts(uint16(r.Config.VXLANPort)).
 					SrcAddrType(AddrTypeLocal, false).
 					DestIPSet(r.IPSetConfigV4.NameForMainIPSet(IPSetIDAllVXLANSourceNets)),
 				Action:  r.filterAllowAction,
@@ -782,7 +782,7 @@ func (r *DefaultRuleRenderer) filterOutputChain(ipVersion uint8) *Chain {
 		rules = append(rules,
 			Rule{
 				Match: Match().ProtocolNum(ProtoUDP).
-					DestPorts(uint16(r.Config.VXLANPort)).
+					UDPDestPorts(uint16(r.Config.VXLANPort)).
 					SrcAddrType(AddrTypeLocal, false).
 					DestIPSet(r.IPSetConfigV6.NameForMainIPSet(IPSetIDAllVXLANSourceNets)),
 				Action:  r.filterAllowAction,
