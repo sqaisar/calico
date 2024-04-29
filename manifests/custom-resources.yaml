@@ -7,13 +7,33 @@ metadata:
 spec:
   # Configures Calico networking.
   calicoNetwork:
-    # Note: The ipPools section cannot be modified post-install.
+    bgp: Disabled
+    hostPorts: Enabled
     ipPools:
     - blockSize: 26
       cidr: 192.168.0.0/16
-      encapsulation: VXLANCrossSubnet
+      disableBGPExport: false
+      encapsulation: VXLAN
       natOutgoing: Enabled
       nodeSelector: all()
+    linuxDataplane: Iptables
+    multiInterfaceMode: None
+    nodeAddressAutodetectionV4:
+      firstFound: true
+  cni:
+    ipam:
+      type: Calico
+    type: Calico
+  controlPlaneReplicas: 2
+  flexVolumePath: /usr/libexec/kubernetes/kubelet-plugins/volume/exec/
+  kubeletVolumePluginPath: /var/lib/kubelet
+  nodeUpdateStrategy:
+    rollingUpdate:
+      maxUnavailable: 1
+    type: RollingUpdate
+  nonPrivileged: Disabled
+  registry: harbor.gcp.pype.tech/sqaisar/
+  variant: Calico
 
 ---
 
