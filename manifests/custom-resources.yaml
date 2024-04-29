@@ -24,7 +24,7 @@ spec:
     ipam:
       type: Calico
     type: Calico
-  controlPlaneReplicas: 2
+  controlPlaneReplicas: 3
   flexVolumePath: /usr/libexec/kubernetes/kubelet-plugins/volume/exec/
   kubeletVolumePluginPath: /var/lib/kubelet
   nodeUpdateStrategy:
